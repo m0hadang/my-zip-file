@@ -15,33 +15,47 @@
     {
       "label": "test",
       "type": "shell",
-      "command": "${workspaceRoot}/build/test/Debug/Tester",
+      "command": "${workspaceRoot}/build/test/Tester --gtest_break_on_failure",
+      // "command": "${workspaceRoot}/build/test/Debug/Tester",
       "problemMatcher": [],
       "dependsOn": [
-        "build-ms"
+        "build"
       ]
     },    
+    // {
+    //   "label": "build-ms",
+    //   "type": "shell",
+    //   "command": "& 'C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/Common7/IDE/devenv.exe' Project.sln /Build Debug",
+    //   "options": {
+    //     "cwd": "${workspaceRoot}/build/"
+    //   },
+    //   // "args": [
+    //   //   // Ask msbuild to generate full paths for file names.
+    //   //   "/property:GenerateFullPaths=true",
+    //   //   "/t:build",
+    //   //   // Do not generate summary otherwise it leads to duplicate errors in Problems panel
+    //   //   "/consoleloggerparameters:NoSummary"
+    //   // ],
+    //   "group": "build",
+    //   "presentation": {
+    //     // Reveal the output only if unrecognized errors occur.
+    //     "reveal": "silent"
+    //   },
+    //   // Use the standard MS compiler pattern to detect errors, warnings and infos
+    //   "problemMatcher": "$msCompile"
+    // },
     {
-      "label": "build-ms",
+      "label": "build",
       "type": "shell",
-      "command": "& 'C:/Program Files (x86)/Microsoft Visual Studio/2019/Community/Common7/IDE/devenv.exe' Project.sln /Build Debug",
+      "command": "cmake --build build --config Debug",
       "options": {
-        "cwd": "${workspaceRoot}/build/"
+        "cwd": "${workspaceRoot}"
       },
-      // "args": [
-      //   // Ask msbuild to generate full paths for file names.
-      //   "/property:GenerateFullPaths=true",
-      //   "/t:build",
-      //   // Do not generate summary otherwise it leads to duplicate errors in Problems panel
-      //   "/consoleloggerparameters:NoSummary"
-      // ],
-      "group": "build",
-      "presentation": {
-        // Reveal the output only if unrecognized errors occur.
-        "reveal": "silent"
+      "group": {
+        "kind": "build",
+        "isDefault": true
       },
-      // Use the standard MS compiler pattern to detect errors, warnings and infos
-      "problemMatcher": "$msCompile"
+      "problemMatcher": []
     }
   ]
 }
