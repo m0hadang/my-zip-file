@@ -1,9 +1,10 @@
-#ifndef MY_ARCHIVE_H_
+﻿#ifndef MY_ARCHIVE_H_
 #define MY_ARCHIVE_H_
 
-#include <vector>
 #include <fstream>
 #include <iomanip>
+#include <vector>
+#include <codecvt>
 
 namespace mohadangkim {
 
@@ -23,6 +24,8 @@ namespace mohadangkim {
 #define PH_DEVMINOR_SIZE 8
 #define PH_PREFIX_SIZE 155
 #define PH_PADDING 12
+
+#define PH_HEADER_SIZE 512
 
 struct posix_header { /* byte offset */
   /*
@@ -57,9 +60,6 @@ struct posix_header { /* byte offset */
    *
    *   return $sum;
    * } [/code]
-   *
-   * 출처: https://joy24.tistory.com/86?category=391670 [항상 기뻐하라(Be joyful
-   * always;)]
    */
   char chksum[PH_CHKSUM_SIZE]; /* 148 */
   /*
@@ -102,24 +102,57 @@ struct posix_header { /* byte offset */
    */
 };
 
+std::wstring to_wstr(const std::string& t_str) {
+	typedef std::codecvt_utf8<wchar_t> convert_type;
+	std::wstring_convert<convert_type, wchar_t> converter;
+	return converter.from_bytes(t_str);
+}
+
+enum class TAR_ERR_CODE {
+  OK,
+  FILE_OPEN_FAIL,
+  INVALID_FILE_SIZE,
+  UNKNOWN,
+};
+
 class Tar {
 private:
+  std::wstring file_path_;
+  TAR_ERR_CODE status_ = TAR_ERR_CODE::UNKNOWN;
+  size_t file_size_ = 0;
+  size_t file_count_ = 0;
   std::vector<std::shared_ptr<posix_header>> tar_headers_;
 
 public:
-  bool read(const char* file_path) { 
-    std::ifstream in(file_path, std::ios::in | std::ios::binary);
-    if (in.is_open() == false) {
-      std::cout << "open file error : " << file_path << std::endl;
-      std::cout << strerror(errno) << std::endl;
+  bool init(const wchar_t* file_path) {
+
+    file_path_ = std::wstring(file_path);
+
+    std::ifstream in;
+    bool is_open = open_file(in);
+    if (is_open == false) {
+      status_ = TAR_ERR_CODE::FILE_OPEN_FAIL;
       return false;
     }
 
-    while (in.eof() == false) {
-      auto tar_header = std::make_shared<posix_header>();
-      init_header(in, *tar_header);
-      tar_headers_.emplace_back(tar_header);
+    file_size_ = get_file_size(in);
+    if (check_valid_file_size(file_size_) == false) {
+      status_ = TAR_ERR_CODE::INVALID_FILE_SIZE;
+      return false;
     }
+
+    size_t file_count = 0;
+    const size_t file_content_size = file_size_ - (PH_HEADER_SIZE * 2);
+    for (size_t total_read_size = 0; total_read_size < file_content_size;
+         total_read_size += PH_HEADER_SIZE) {
+      auto tar_header = std::make_shared<posix_header>();
+      read_header(in, PH_HEADER_SIZE, *tar_header);
+      tar_headers_.emplace_back(tar_header);
+      ++file_count;
+    }
+
+    in.close();
+    status_ = TAR_ERR_CODE::OK;
 
     return true;
   }
@@ -129,9 +162,41 @@ public:
     }
     return tar_headers_[idx];
   }
+  TAR_ERR_CODE status() { 
+    return status_; 
+  }
+  size_t file_size() { return file_size_; }
+  void print() {
+    std::wcout << "file path : " << file_path_ << std::endl;
+    std::wcout << "status_ : " << (int32_t)status() << std::endl;
+    std::wcout << "file_size : " << file_size_ << std::endl;
+    std::wcout << "file_count : " << file_count_ << std::endl;
+  }
 private:
-  void init_header(std::ifstream& in, posix_header& tar_header) {
-    in.read((char*)&tar_header, sizeof(posix_header));
+  bool check_valid_file_size(size_t file_size) {    
+    if (file_size < PH_HEADER_SIZE) {
+      return false;
+    }
+    return (file_size % PH_HEADER_SIZE) == 0;
+  }
+  bool open_file(std::ifstream& in) {
+    in.open(file_path_.c_str(), std::ios::in | std::ios::binary);
+    if (in.is_open() == false) {
+      std::cout << "open file error : " << file_path_.c_str() << std::endl;
+      std::cout << strerror(errno) << std::endl;
+      return false;
+    }
+    return true;
+  }
+  size_t get_file_size(std::ifstream& in) {
+    auto file_size = in.tellg();
+    in.seekg(0, std::ios::end);
+    file_size = in.tellg() - file_size;
+    in.seekg(0, std::ios::beg);
+    return (size_t)file_size;
+  }
+  void read_header(std::ifstream& in, const size_t read_size, posix_header& tar_header) {
+    in.read((char*)&tar_header, read_size);
   }
 };
 

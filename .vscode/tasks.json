@@ -15,8 +15,8 @@
     {
       "label": "test",
       "type": "shell",
-      "command": "${workspaceRoot}/build/test/Tester --gtest_break_on_failure",
-      // "command": "${workspaceRoot}/build/test/Debug/Tester",
+      //"command": "${workspaceRoot}/build/test/Tester --gtest_break_on_failure",
+      "command": "${workspaceRoot}/build/test/Debug/Tester --gtest_break_on_failure",//ms
       "problemMatcher": [],
       "dependsOn": [
         "build"
