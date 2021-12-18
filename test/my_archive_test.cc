@@ -1,5 +1,10 @@
-﻿#include <gtest/gtest.h>
+﻿#include <gtest/gtest-matchers.h>
+#include <gmock/gmock-matchers.h>
+#include <gmock/gmock-more-matchers.h>
+
+#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+
 #include "../my_archive.h"
 #include <sstream>
 #include <vector>
@@ -15,7 +20,65 @@ using namespace mohadangkim;
 #define name_to_tar(X) #X ## ".tar"
 #define FILE_PATH_SIZE 10240
 
-#define VERY_LONG vecry_longggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+using testing::StartsWith;
+using testing::Matcher;
+
+TEST(SUT_UTILITY, to_wstr) {
+	char buf[1024] = {
+		(char)0xED,(char)0x95,(char)0x9C,(char)0xEA,(char)0xB8,
+		(char)0x80,(char)0x20,(char)0xED,(char)0x8C,(char)0x8C,
+		(char)0xEC,(char)0x9D,(char)0xBC,(char)0x20,(char)0xEC,
+		(char)0x9D,(char)0xB4,(char)0xEB,(char)0xA6,(char)0x84,
+		(char)0x2E,(char)0x74,(char)0x78,(char)0x74,
+		(char)0x00 };//L"한글 파일 이름.txt"
+
+  
+  std::wstring str1 = to_wstr(buf);
+  std::wstring str2 = L"한글 파일 이름.txt";
+  EXPECT_EQ(str1, str2);
+}
+
+TEST(SUT_UTILITY, oct_to_size) {
+  const size_t buf_size = 7;
+
+  char num0[buf_size] = "000000";
+  char num1[buf_size] = "000001";
+  char num2[buf_size] = "000002";
+  char num7[buf_size] = "000007";
+  char num8[buf_size] = "000010";
+  char num9[buf_size] = "000011";
+  char num15[buf_size] = "000017";
+  char num16[buf_size] = "000020";
+  char num63[buf_size] = "000077";
+  char num64[buf_size] = "000100";
+
+  size_t test_size = buf_size;
+  EXPECT_EQ(oct_to_size(num0, test_size), 0);
+  EXPECT_EQ(oct_to_size(num1, test_size), 1);
+  EXPECT_EQ(oct_to_size(num2, test_size), 2);
+  EXPECT_EQ(oct_to_size(num7, test_size), 7);
+  EXPECT_EQ(oct_to_size(num8, test_size), 8);
+  EXPECT_EQ(oct_to_size(num9, test_size), 9);
+  EXPECT_EQ(oct_to_size(num15, test_size), 15);
+  EXPECT_EQ(oct_to_size(num16, test_size), 16);
+  EXPECT_EQ(oct_to_size(num63, test_size), 63);
+  EXPECT_EQ(oct_to_size(num64, test_size), 64);
+  
+  test_size = buf_size - 1;
+  EXPECT_EQ(oct_to_size(num0, test_size), 0);
+  EXPECT_EQ(oct_to_size(num1, test_size), 1);
+  EXPECT_EQ(oct_to_size(num2, test_size), 2);
+  EXPECT_EQ(oct_to_size(num7, test_size), 7);
+  EXPECT_EQ(oct_to_size(num8, test_size), 8);
+  EXPECT_EQ(oct_to_size(num9, test_size), 9);
+  EXPECT_EQ(oct_to_size(num15, test_size), 15);
+  EXPECT_EQ(oct_to_size(num16, test_size), 16);
+  EXPECT_EQ(oct_to_size(num63, test_size), 63);
+  EXPECT_EQ(oct_to_size(num64, test_size), 64);
+
+  char num_invalid[buf_size] = "000900";
+  EXPECT_EQ(oct_to_size(num_invalid, test_size), -1);
+}
 
 struct MyArchiveFixture : public ::testing::Test {
   static std::vector<Tar*> single_file_vec_;
@@ -27,7 +90,7 @@ struct MyArchiveFixture : public ::testing::Test {
   static Tar single_file_1025byte_;
   static Tar invalid_file_small_that_512;
   static Tar koread_file_name;
-  static Tar VERY_LONG;
+  static Tar multi_file_without_dir;
 
   static void SetUpTestCase() {
     std::wcout.imbue(std::locale( "kor" ));
@@ -43,7 +106,6 @@ struct MyArchiveFixture : public ::testing::Test {
     AddTestTarget(cwd, name_to_tar(single_file_513byte), single_file_513byte_);
     AddTestTarget(cwd, name_to_tar(single_file_1024byte), single_file_1024byte_);
     AddTestTarget(cwd, name_to_tar(single_file_1025byte), single_file_1025byte_);
-    AddTestTarget(cwd, name_to_tar(single_file_1025byte), single_file_1025byte_);
     InitTestTarget(cwd, name_to_tar(invalid_file_small_that_512), invalid_file_small_that_512);
     {
       std::wstringstream stm;
@@ -51,10 +113,7 @@ struct MyArchiveFixture : public ::testing::Test {
       koread_file_name.init(stm.str().c_str());      
       single_file_vec_.emplace_back(&koread_file_name);
     }
-    AddTestTarget(
-      cwd, 
-      name_to_tar(vecry_longggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg), 
-      VERY_LONG);
+    AddTestTarget(cwd, name_to_tar(multi_file_without_dir), multi_file_without_dir);
   }  
   virtual void SetUp() override {
   }
@@ -87,7 +146,7 @@ Tar MyArchiveFixture::single_file_1024byte_;
 Tar MyArchiveFixture::single_file_1025byte_;
 Tar MyArchiveFixture::invalid_file_small_that_512;
 Tar MyArchiveFixture::koread_file_name;
-Tar MyArchiveFixture::VERY_LONG;
+Tar MyArchiveFixture::multi_file_without_dir;
 
 TEST_F(MyArchiveFixture, FileOpenTest) {
   for(const auto it : single_file_vec_) {
@@ -106,19 +165,35 @@ TEST_F(MyArchiveFixture, TestKoreaFileName) {
   EXPECT_EQ(str1, str2);
 }
 
-void print_hex(const char* data, size_t size) {
-  for (size_t i = 0; i < size; ++i) {
-    std::cout << "0x" << std::hex << (int)data[i] << ",";
-  }
-  std::cout << std::endl;
+TEST_F(MyArchiveFixture, SingleFileCount) {
+  EXPECT_EQ(single_file_0byte_.file_count(), 1);
 }
 
+TEST_F(MyArchiveFixture, MultiFileCount) {
+  EXPECT_EQ(multi_file_without_dir.file_count(), 4);
+}
+
+TEST_F(MyArchiveFixture, MultiFileList) {
+  auto item1 = multi_file_without_dir.at(0);
+  auto item2 = multi_file_without_dir.at(1);
+  auto item3 = multi_file_without_dir.at(2);
+  auto item4 = multi_file_without_dir.at(3);
+  
+  const Matcher<const std::string&> m = StartsWith("multi_file_");
+
+  EXPECT_TRUE(m.Matches(item1->name));
+  EXPECT_TRUE(m.Matches(item2->name));
+  EXPECT_TRUE(m.Matches(item3->name));
+  EXPECT_TRUE(m.Matches(item4->name));
+}
+
+
 TEST_F(MyArchiveFixture, TarHeaderFormat) {
-  std::shared_ptr<posix_header> first_tar_header = VERY_LONG.at(0);
-  std::cout << first_tar_header->name << std::endl;
+  // std::shared_ptr<posix_header> first_tar_header = VERY_LONG.at(0);
+  // std::cout << first_tar_header->name << std::endl;
   // print_hex(first_tar_header->linkname, PH_LINKNAME_SIZE);
   // print_hex(first_tar_header->prefix, PH_PREFIX_SIZE);
-  std::cout << first_tar_header->typeflag << std::endl;
+  // std::cout << first_tar_header->typeflag << std::endl;
 //EXPECT_STREQ(first_tar_header->name, "a.txt");
 //print_str_should_fill_null_but_no_need_end_null(tar_header.name);
 //print_num_must_end_null(tar_header.mode);

@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <vector>
 #include <codecvt>
+#include <iostream>
 
 namespace mohadangkim {
 
@@ -108,6 +109,27 @@ std::wstring to_wstr(const std::string& t_str) {
 	return converter.from_bytes(t_str);
 }
 
+int32_t oct_to_size(char* buf, size_t size){
+  int32_t out = 0;
+  size_t i = 0;
+  for (size_t i = 0; i < size; ++i) {
+    if (buf[i] == '\0') {
+      break;
+    }
+
+    const bool is_oct_ch = ('0' <= buf[i] && buf[i] <= '7');
+    if (is_oct_ch == false) {
+      out = -1;
+      break;
+    }
+
+    out = (out << 3);
+    out = out | (buf[i] - '0');
+  }
+
+  return out;
+}
+
 enum class TAR_ERR_CODE {
   OK,
   FILE_OPEN_FAIL,
@@ -125,7 +147,6 @@ private:
 
 public:
   bool init(const wchar_t* file_path) {
-
     file_path_ = std::wstring(file_path);
 
     std::ifstream in;
@@ -141,14 +162,36 @@ public:
       return false;
     }
 
-    size_t file_count = 0;
+    std::wcout << file_path << std::endl;
+
+    file_count_ = 0;
     const size_t file_content_size = file_size_ - (PH_HEADER_SIZE * 2);
-    for (size_t total_read_size = 0; total_read_size < file_content_size;
-         total_read_size += PH_HEADER_SIZE) {
+    for (size_t total_read_size = 0; total_read_size < file_content_size;) {
       auto tar_header = std::make_shared<posix_header>();
       read_header(in, PH_HEADER_SIZE, *tar_header);
+      total_read_size += PH_HEADER_SIZE;
+
+      const auto content_size = oct_to_size(tar_header->size, PH_SIZE_SIZE);
+      if (content_size > 0) {
+        size_t content_alloc_space_size = 0;
+        int block_count = (content_size / PH_HEADER_SIZE);
+        const int remain_block_size = (content_size % PH_HEADER_SIZE);
+        if (block_count < 1) {
+          content_alloc_space_size = PH_HEADER_SIZE * 1;
+        } else {
+          if (remain_block_size != 0) {
+            ++block_count;
+          }
+          content_alloc_space_size = PH_HEADER_SIZE * block_count;
+        }
+        std::cout << "content size : " << content_size
+                  << ", jump : " << content_alloc_space_size << std::endl;
+        in.seekg(content_alloc_space_size, std::ios::cur);  // jump content
+        total_read_size += content_alloc_space_size;
+      }
+
       tar_headers_.emplace_back(tar_header);
-      ++file_count;
+      ++file_count_;
     }
 
     in.close();
@@ -164,6 +207,9 @@ public:
   }
   TAR_ERR_CODE status() { 
     return status_; 
+  }
+  size_t file_count() {
+    return file_count_; 
   }
   size_t file_size() { return file_size_; }
   void print() {
