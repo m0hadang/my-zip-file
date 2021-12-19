@@ -91,6 +91,7 @@ struct MyArchiveFixture : public ::testing::Test {
   static Tar invalid_file_small_that_512;
   static Tar koread_file_name;
   static Tar multi_file_without_dir;
+  static Tar multi_file_with_dir;
 
   static void SetUpTestCase() {
     std::wcout.imbue(std::locale( "kor" ));
@@ -114,6 +115,7 @@ struct MyArchiveFixture : public ::testing::Test {
       single_file_vec_.emplace_back(&koread_file_name);
     }
     AddTestTarget(cwd, name_to_tar(multi_file_without_dir), multi_file_without_dir);
+    AddTestTarget(cwd, name_to_tar(multi_file_with_dir), multi_file_with_dir);
   }  
   virtual void SetUp() override {
   }
@@ -147,6 +149,7 @@ Tar MyArchiveFixture::single_file_1025byte_;
 Tar MyArchiveFixture::invalid_file_small_that_512;
 Tar MyArchiveFixture::koread_file_name;
 Tar MyArchiveFixture::multi_file_without_dir;
+Tar MyArchiveFixture::multi_file_with_dir;
 
 TEST_F(MyArchiveFixture, FileOpenTest) {
   for(const auto it : single_file_vec_) {
@@ -159,7 +162,7 @@ TEST_F(MyArchiveFixture, FileSizeTest) {
 }
 
 TEST_F(MyArchiveFixture, TestKoreaFileName) {
-  auto koread_file_name_header = koread_file_name.at(0);
+  auto koread_file_name_header = koread_file_name.file_at(0);
   std::wstring str1 = to_wstr(koread_file_name_header->name);
   std::wstring str2 = L"한글 파일 이름.txt";
   EXPECT_EQ(str1, str2);
@@ -169,15 +172,15 @@ TEST_F(MyArchiveFixture, SingleFileCount) {
   EXPECT_EQ(single_file_0byte_.file_count(), 1);
 }
 
-TEST_F(MyArchiveFixture, MultiFileCount) {
+TEST_F(MyArchiveFixture, MultiFileWithOutDirCount) {
   EXPECT_EQ(multi_file_without_dir.file_count(), 4);
 }
 
-TEST_F(MyArchiveFixture, MultiFileList) {
-  auto item1 = multi_file_without_dir.at(0);
-  auto item2 = multi_file_without_dir.at(1);
-  auto item3 = multi_file_without_dir.at(2);
-  auto item4 = multi_file_without_dir.at(3);
+TEST_F(MyArchiveFixture, MultiFileWithOutDirList) {
+  auto item1 = multi_file_without_dir.file_at(0);
+  auto item2 = multi_file_without_dir.file_at(1);
+  auto item3 = multi_file_without_dir.file_at(2);
+  auto item4 = multi_file_without_dir.file_at(3);
   
   const Matcher<const std::string&> m = StartsWith("multi_file_");
 
@@ -187,6 +190,31 @@ TEST_F(MyArchiveFixture, MultiFileList) {
   EXPECT_TRUE(m.Matches(item4->name));
 }
 
+TEST_F(MyArchiveFixture, MultiFileWithDirCount) {
+  EXPECT_EQ(multi_file_with_dir.file_count(), 4);
+  EXPECT_EQ(multi_file_with_dir.dir_count(), 4);
+}
+
+TEST_F(MyArchiveFixture, MultiFileWithDirList) {
+  auto file_item1 = multi_file_with_dir.file_at(0);
+  auto file_item2 = multi_file_with_dir.file_at(1);
+  auto file_item3 = multi_file_with_dir.file_at(2);
+  auto file_item4 = multi_file_with_dir.file_at(3);
+
+  auto dir_item1 = multi_file_with_dir.dir_at(0);
+  auto dir_item2 = multi_file_with_dir.dir_at(1);
+  auto dir_item3 = multi_file_with_dir.dir_at(2);
+  auto dir_item4 = multi_file_with_dir.dir_at(3);
+
+  EXPECT_STREQ(file_item1->name, "multi_file_with_dir/multi_file_1024byte.txt");
+  EXPECT_STREQ(file_item2->name, "multi_file_with_dir/dir1/multi_file_512byte.txt");
+  EXPECT_STREQ(file_item3->name, "multi_file_with_dir/dir2/multi_file_513byte.txt");
+  EXPECT_STREQ(file_item4->name, "multi_file_with_dir/dir2/dir3/multi_file_1025byte.txt");
+  EXPECT_STREQ(dir_item1->name, "multi_file_with_dir/");
+  EXPECT_STREQ(dir_item2->name, "multi_file_with_dir/dir1/");
+  EXPECT_STREQ(dir_item3->name, "multi_file_with_dir/dir2/");
+  EXPECT_STREQ(dir_item4->name, "multi_file_with_dir/dir2/dir3/");
+}
 
 TEST_F(MyArchiveFixture, TarHeaderFormat) {
   // std::shared_ptr<posix_header> first_tar_header = VERY_LONG.at(0);

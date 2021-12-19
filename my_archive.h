@@ -28,6 +28,8 @@ namespace mohadangkim {
 
 #define PH_HEADER_SIZE 512
 
+#define TYPE_FLAG_DIR '5'
+
 struct posix_header { /* byte offset */
   /*
    * 파일명, 디렉터리명, 디렉터리인 경우 패스 경로 '/' 로 끝난다
@@ -139,15 +141,15 @@ enum class TAR_ERR_CODE {
 
 class Tar {
 private:
-  std::wstring file_path_;
+  std::wstring tar_file_path_;
   TAR_ERR_CODE status_ = TAR_ERR_CODE::UNKNOWN;
-  size_t file_size_ = 0;
-  size_t file_count_ = 0;
-  std::vector<std::shared_ptr<posix_header>> tar_headers_;
+  size_t tar_file_size_ = 0;
+  std::vector<std::shared_ptr<posix_header>> file_headers_;
+  std::vector<std::shared_ptr<posix_header>> dir_headers_;
 
 public:
-  bool init(const wchar_t* file_path) {
-    file_path_ = std::wstring(file_path);
+  bool init(const wchar_t* tar_file_path) {
+    tar_file_path_ = std::wstring(tar_file_path);
 
     std::ifstream in;
     bool is_open = open_file(in);
@@ -156,42 +158,31 @@ public:
       return false;
     }
 
-    file_size_ = get_file_size(in);
-    if (check_valid_file_size(file_size_) == false) {
+    tar_file_size_ = get_file_size(in);
+    if (check_valid_file_size(tar_file_size_) == false) {
       status_ = TAR_ERR_CODE::INVALID_FILE_SIZE;
       return false;
     }
 
-    std::wcout << file_path << std::endl;
-
-    file_count_ = 0;
-    const size_t file_content_size = file_size_ - (PH_HEADER_SIZE * 2);
-    for (size_t total_read_size = 0; total_read_size < file_content_size;) {
+    const size_t tar_file_content_size = tar_file_size_ - (PH_HEADER_SIZE * 2);
+    for (size_t total_read_size = 0; total_read_size < tar_file_content_size;) {
       auto tar_header = std::make_shared<posix_header>();
+
       read_header(in, PH_HEADER_SIZE, *tar_header);
       total_read_size += PH_HEADER_SIZE;
 
       const auto content_size = oct_to_size(tar_header->size, PH_SIZE_SIZE);
-      if (content_size > 0) {
-        size_t content_alloc_space_size = 0;
-        int block_count = (content_size / PH_HEADER_SIZE);
-        const int remain_block_size = (content_size % PH_HEADER_SIZE);
-        if (block_count < 1) {
-          content_alloc_space_size = PH_HEADER_SIZE * 1;
-        } else {
-          if (remain_block_size != 0) {
-            ++block_count;
-          }
-          content_alloc_space_size = PH_HEADER_SIZE * block_count;
-        }
-        std::cout << "content size : " << content_size
-                  << ", jump : " << content_alloc_space_size << std::endl;
-        in.seekg(content_alloc_space_size, std::ios::cur);  // jump content
-        total_read_size += content_alloc_space_size;
+      if (content_size < 0) {
+        status_ = TAR_ERR_CODE::INVALID_FILE_SIZE;
+        return false;
+      }
+      if (is_dir_tar_header(tar_header) == false && content_size > 0) {
+        size_t content_block_space_size = get_content_block_space_size(content_size);
+        in.seekg(content_block_space_size, std::ios::cur);  // jump content
+        total_read_size += content_block_space_size;
       }
 
-      tar_headers_.emplace_back(tar_header);
-      ++file_count_;
+      add_tar_header(tar_header);
     }
 
     in.close();
@@ -199,24 +190,40 @@ public:
 
     return true;
   }
-  std::shared_ptr<posix_header> at(size_t idx) {
-    if (idx >= tar_headers_.size()) {
+  std::shared_ptr<posix_header> file_at(size_t idx) {
+    if (idx >= file_headers_.size()) {
       return nullptr;
     }
-    return tar_headers_[idx];
+    return file_headers_[idx];
+  }
+  std::shared_ptr<posix_header> dir_at(size_t idx) {
+    if (idx >= dir_headers_.size()) {
+      return nullptr;
+    }
+    return dir_headers_[idx];
   }
   TAR_ERR_CODE status() { 
     return status_; 
   }
   size_t file_count() {
-    return file_count_; 
+    return file_headers_.size(); 
   }
-  size_t file_size() { return file_size_; }
+  size_t dir_count() {
+    return dir_headers_.size(); 
+  }  
+  void add_tar_header(std::shared_ptr<posix_header> tar_header) {
+    if (is_dir_tar_header(tar_header)) {
+      dir_headers_.emplace_back(tar_header);
+    } else {
+      file_headers_.emplace_back(tar_header);
+    }
+  }
+  size_t tar_file_size() { return tar_file_size_; }
   void print() {
-    std::wcout << "file path : " << file_path_ << std::endl;
+    std::wcout << "tar file path : " << tar_file_path_ << std::endl;
     std::wcout << "status_ : " << (int32_t)status() << std::endl;
-    std::wcout << "file_size : " << file_size_ << std::endl;
-    std::wcout << "file_count : " << file_count_ << std::endl;
+    std::wcout << "file_size : " << tar_file_size_ << std::endl;
+    std::wcout << "file_count : " << file_count() << std::endl;
   }
 private:
   bool check_valid_file_size(size_t file_size) {    
@@ -226,9 +233,9 @@ private:
     return (file_size % PH_HEADER_SIZE) == 0;
   }
   bool open_file(std::ifstream& in) {
-    in.open(file_path_.c_str(), std::ios::in | std::ios::binary);
+    in.open(tar_file_path_.c_str(), std::ios::in | std::ios::binary);
     if (in.is_open() == false) {
-      std::cout << "open file error : " << file_path_.c_str() << std::endl;
+      std::cout << "open file error : " << tar_file_path_.c_str() << std::endl;
       std::cout << strerror(errno) << std::endl;
       return false;
     }
@@ -243,6 +250,24 @@ private:
   }
   void read_header(std::ifstream& in, const size_t read_size, posix_header& tar_header) {
     in.read((char*)&tar_header, read_size);
+  }
+  size_t get_content_block_space_size(size_t content_size) {
+    size_t content_alloc_space_size = 0;
+    size_t block_count = (content_size / PH_HEADER_SIZE);
+    const int remain_block_size = (content_size % PH_HEADER_SIZE);
+    if (block_count < 1) {
+      content_alloc_space_size = PH_HEADER_SIZE * 1;
+    } else {
+      if (remain_block_size != 0) {
+        ++block_count;
+      }
+      content_alloc_space_size = PH_HEADER_SIZE * block_count;
+    }
+
+    return content_alloc_space_size;
+  }
+  bool is_dir_tar_header(std::shared_ptr<posix_header> tar_header) {
+    return tar_header->typeflag == TYPE_FLAG_DIR;
   }
 };
 
