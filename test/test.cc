@@ -5,16 +5,16 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-#include "../my_archive.h"
+#include "../my_tar.h"
 #include <sstream>
 #include <vector>
 
 using namespace mohadangkim;
 
 #ifdef _WIN32
-#define INPUT_PATH "\\test\\input\\"
+#define TEST_DATA_TAR_PATH "\\test\\test_data_tar\\"
 #else
-#define INPUT_PATH "/test/input/"
+#define TEST_DATA_TAR_PATH "/test/test_data_tar/"
 #endif
 
 #define name_to_tar(X) #X ## ".tar"
@@ -31,7 +31,6 @@ TEST(SUT_UTILITY, to_wstr) {
 		(char)0x9D,(char)0xB4,(char)0xEB,(char)0xA6,(char)0x84,
 		(char)0x2E,(char)0x74,(char)0x78,(char)0x74,
 		(char)0x00 };//L"한글 파일 이름.txt"
-
   
   std::wstring str1 = to_wstr(buf);
   std::wstring str2 = L"한글 파일 이름.txt";
@@ -80,7 +79,7 @@ TEST(SUT_UTILITY, oct_to_size) {
   EXPECT_EQ(oct_to_size(num_invalid, test_size), -1);
 }
 
-struct MyArchiveFixture : public ::testing::Test {
+struct SUT_READ_TAR : public ::testing::Test {
   static std::vector<Tar*> single_file_vec_;
   static Tar single_file_0byte_;
   static Tar single_file_1byte_;
@@ -110,7 +109,7 @@ struct MyArchiveFixture : public ::testing::Test {
     InitTestTarget(cwd, name_to_tar(invalid_file_small_that_512), invalid_file_small_that_512);
     {
       std::wstringstream stm;
-      stm << cwd << INPUT_PATH << L"한글 파일 이름.tar";
+      stm << cwd << TEST_DATA_TAR_PATH << L"한글 파일 이름.tar";
       koread_file_name.init(stm.str().c_str());      
       single_file_vec_.emplace_back(&koread_file_name);
     }
@@ -127,7 +126,7 @@ private:
     const char* tar_file_name,
     Tar& tar) {
       std::wstringstream stm;
-      stm << current_working_dir_path << INPUT_PATH << tar_file_name;
+      stm << current_working_dir_path << TEST_DATA_TAR_PATH << tar_file_name;
       tar.init(stm.str().c_str());
   }
   static void AddTestTarget(
@@ -139,44 +138,44 @@ private:
   }
 };
 
-std::vector<Tar*> MyArchiveFixture::single_file_vec_;
-Tar MyArchiveFixture::single_file_0byte_;
-Tar MyArchiveFixture::single_file_1byte_;
-Tar MyArchiveFixture::single_file_512byte_;
-Tar MyArchiveFixture::single_file_513byte_;
-Tar MyArchiveFixture::single_file_1024byte_;
-Tar MyArchiveFixture::single_file_1025byte_;
-Tar MyArchiveFixture::invalid_file_small_that_512;
-Tar MyArchiveFixture::koread_file_name;
-Tar MyArchiveFixture::multi_file_without_dir;
-Tar MyArchiveFixture::multi_file_with_dir;
+std::vector<Tar*> SUT_READ_TAR::single_file_vec_;
+Tar SUT_READ_TAR::single_file_0byte_;
+Tar SUT_READ_TAR::single_file_1byte_;
+Tar SUT_READ_TAR::single_file_512byte_;
+Tar SUT_READ_TAR::single_file_513byte_;
+Tar SUT_READ_TAR::single_file_1024byte_;
+Tar SUT_READ_TAR::single_file_1025byte_;
+Tar SUT_READ_TAR::invalid_file_small_that_512;
+Tar SUT_READ_TAR::koread_file_name;
+Tar SUT_READ_TAR::multi_file_without_dir;
+Tar SUT_READ_TAR::multi_file_with_dir;
 
-TEST_F(MyArchiveFixture, FileOpenTest) {
+TEST_F(SUT_READ_TAR, FileOpenTest) {
   for(const auto it : single_file_vec_) {
     EXPECT_EQ(it->status(), TAR_ERR_CODE::OK);
   }
 }
 
-TEST_F(MyArchiveFixture, FileSizeTest) {
+TEST_F(SUT_READ_TAR, FileSizeTest) {
   EXPECT_EQ(invalid_file_small_that_512.status(), TAR_ERR_CODE::INVALID_FILE_SIZE);
 }
 
-TEST_F(MyArchiveFixture, TestKoreaFileName) {
+TEST_F(SUT_READ_TAR, TestKoreaFileName) {
   auto koread_file_name_header = koread_file_name.file_at(0);
   std::wstring str1 = to_wstr(koread_file_name_header->name);
   std::wstring str2 = L"한글 파일 이름.txt";
   EXPECT_EQ(str1, str2);
 }
 
-TEST_F(MyArchiveFixture, SingleFileCount) {
+TEST_F(SUT_READ_TAR, SingleFileCount) {
   EXPECT_EQ(single_file_0byte_.file_count(), 1);
 }
 
-TEST_F(MyArchiveFixture, MultiFileWithOutDirCount) {
+TEST_F(SUT_READ_TAR, MultiFileWithOutDirCount) {
   EXPECT_EQ(multi_file_without_dir.file_count(), 4);
 }
 
-TEST_F(MyArchiveFixture, MultiFileWithOutDirList) {
+TEST_F(SUT_READ_TAR, MultiFileWithOutDirList) {
   auto item1 = multi_file_without_dir.file_at(0);
   auto item2 = multi_file_without_dir.file_at(1);
   auto item3 = multi_file_without_dir.file_at(2);
@@ -190,12 +189,12 @@ TEST_F(MyArchiveFixture, MultiFileWithOutDirList) {
   EXPECT_TRUE(m.Matches(item4->name));
 }
 
-TEST_F(MyArchiveFixture, MultiFileWithDirCount) {
+TEST_F(SUT_READ_TAR, MultiFileWithDirCount) {
   EXPECT_EQ(multi_file_with_dir.file_count(), 4);
   EXPECT_EQ(multi_file_with_dir.dir_count(), 4);
 }
 
-TEST_F(MyArchiveFixture, MultiFileWithDirList) {
+TEST_F(SUT_READ_TAR, MultiFileWithDirList) {
   auto file_item1 = multi_file_with_dir.file_at(0);
   auto file_item2 = multi_file_with_dir.file_at(1);
   auto file_item3 = multi_file_with_dir.file_at(2);
@@ -216,27 +215,27 @@ TEST_F(MyArchiveFixture, MultiFileWithDirList) {
   EXPECT_STREQ(dir_item4->name, "multi_file_with_dir/dir2/dir3/");
 }
 
-TEST_F(MyArchiveFixture, TarHeaderFormat) {
+TEST_F(SUT_READ_TAR, TarHeaderFormat) {
   // std::shared_ptr<posix_header> first_tar_header = VERY_LONG.at(0);
   // std::cout << first_tar_header->name << std::endl;
   // print_hex(first_tar_header->linkname, PH_LINKNAME_SIZE);
   // print_hex(first_tar_header->prefix, PH_PREFIX_SIZE);
   // std::cout << first_tar_header->typeflag << std::endl;
-//EXPECT_STREQ(first_tar_header->name, "a.txt");
-//print_str_should_fill_null_but_no_need_end_null(tar_header.name);
-//print_num_must_end_null(tar_header.mode);
-//print_num_must_end_null(tar_header.uid);
-//print_num_must_end_null(tar_header.gid);
-//print_num_recommend_end_null_(tar_header.size);
-//print_num_recommend_end_null_(tar_header.mtime);
-//print_num_must_end_null(tar_header.chksum);
-//print_ch(tar_header.typeflag);
-//print_str_should_fill_null_but_no_need_end_null(tar_header.linkname);
-//print_str_must_end_null(tar_header.magic);
-//print_num_recommend_end_null_(tar_header.version);
-//print_str_must_end_null(tar_header.uname);
-//print_str_must_end_null(tar_header.gname);
-//print_num_must_end_null(tar_header.devmajor);
-//print_num_must_end_null(tar_header.devminor);
-//print_str_should_fill_null_but_no_need_end_null(tar_header.prefix);  
+  //EXPECT_STREQ(first_tar_header->name, "a.txt");
+  //print_str_should_fill_null_but_no_need_end_null(tar_header.name);
+  //print_num_must_end_null(tar_header.mode);
+  //print_num_must_end_null(tar_header.uid);
+  //print_num_must_end_null(tar_header.gid);
+  //print_num_recommend_end_null_(tar_header.size);
+  //print_num_recommend_end_null_(tar_header.mtime);
+  //print_num_must_end_null(tar_header.chksum);
+  //print_ch(tar_header.typeflag);
+  //print_str_should_fill_null_but_no_need_end_null(tar_header.linkname);
+  //print_str_must_end_null(tar_header.magic);
+  //print_num_recommend_end_null_(tar_header.version);
+  //print_str_must_end_null(tar_header.uname);
+  //print_str_must_end_null(tar_header.gname);
+  //print_num_must_end_null(tar_header.devmajor);
+  //print_num_must_end_null(tar_header.devminor);
+  //print_str_should_fill_null_but_no_need_end_null(tar_header.prefix);  
 }

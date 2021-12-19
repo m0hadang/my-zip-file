@@ -211,13 +211,6 @@ public:
   size_t dir_count() {
     return dir_headers_.size(); 
   }  
-  void add_tar_header(std::shared_ptr<posix_header> tar_header) {
-    if (is_dir_tar_header(tar_header)) {
-      dir_headers_.emplace_back(tar_header);
-    } else {
-      file_headers_.emplace_back(tar_header);
-    }
-  }
   size_t tar_file_size() { return tar_file_size_; }
   void print() {
     std::wcout << "tar file path : " << tar_file_path_ << std::endl;
@@ -226,6 +219,13 @@ public:
     std::wcout << "file_count : " << file_count() << std::endl;
   }
 private:
+  void add_tar_header(std::shared_ptr<posix_header> tar_header) {
+    if (is_dir_tar_header(tar_header)) {
+      dir_headers_.emplace_back(tar_header);
+    } else {
+      file_headers_.emplace_back(tar_header);
+    }
+  }
   bool check_valid_file_size(size_t file_size) {    
     if (file_size < PH_HEADER_SIZE) {
       return false;

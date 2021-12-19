@@ -8,7 +8,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 14)
 
 set(Sources
-  my_archive_test.cc
+  test.cc
 )
 
 add_executable(${This} ${Sources})
