@@ -8,14 +8,18 @@
 #include "../my_tar.h"
 #include <sstream>
 #include <vector>
+#include <unordered_set>
 
 using namespace mohadangkim;
 
 #ifdef _WIN32
-#define TEST_DATA_TAR_PATH "\\test\\test_data_tar\\"
+#define SPLIT_CHAR "\\"
 #else
-#define TEST_DATA_TAR_PATH "/test/test_data_tar/"
+#define SPLIT_CHAR "/"
 #endif
+
+#define TEST_DATA_TAR_PATH  "." SPLIT_CHAR "test_data_tar" SPLIT_CHAR
+#define TEST_DATA_DIR_PATH  "." SPLIT_CHAR "test_data_dir" SPLIT_CHAR
 
 #define name_to_tar(X) #X ## ".tar"
 #define FILE_PATH_SIZE 10240
@@ -79,6 +83,67 @@ TEST(SUT_UTILITY, oct_to_size) {
   EXPECT_EQ(oct_to_size(num_invalid, test_size), -1);
 }
 
+TEST(SUT_UTILITY, get_dir_name) {
+  EXPECT_EQ(get_dir_name(L""), L"/");
+  EXPECT_EQ(get_dir_name(L"/"), L"/");
+  EXPECT_EQ(get_dir_name(L"\\"), L"/");
+  EXPECT_EQ(get_dir_name(L"a"), L"a/");
+  EXPECT_EQ(get_dir_name(L"a/"), L"a/");
+  EXPECT_EQ(get_dir_name(L"a\\"), L"a/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file"), L"dir_with_multi_dir_file/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/"), L"dir_with_multi_dir_file/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\"), L"dir_with_multi_dir_file/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/empty_dir"), L"empty_dir/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\empty_dir"), L"empty_dir/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/empty_dir/"), L"empty_dir/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\empty_dir\\"), L"empty_dir/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/한글"), L"한글/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\한글"), L"한글/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/한글/"), L"한글/");
+  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\한글\\"), L"한글/");
+}
+
+TEST(SUT_UTILITY, dir_listing) {
+  std::wstringstream stm;
+  stm << TEST_DATA_DIR_PATH << L"dir_with_multi_dir_file" << SPLIT_CHAR; 
+  std::vector<std::wstring> paths = get_dir_list(stm.str().c_str());
+
+  std::unordered_set<std::wstring> compare_set;
+  compare_set.emplace(L"dir_with_multi_dir_file/");
+  compare_set.emplace(L"dir_with_multi_dir_file/empty_dir/");
+  compare_set.emplace(L"dir_with_multi_dir_file/more_dir/");
+  compare_set.emplace(L"dir_with_multi_dir_file/multi_file_1024byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/multi_file_1025byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/multi_file_512byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/multi_file_513byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/한글 디렉터리 이름/");
+  compare_set.emplace(L"dir_with_multi_dir_file/more_dir/dir/");
+  compare_set.emplace(L"dir_with_multi_dir_file/more_dir/single_file_512byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/more_dir/single_file_513byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/한글 디렉터리 이름/한글 파일 이름.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/more_dir/dir/single_file_0byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/more_dir/dir/single_file_1024byte.txt");
+  compare_set.emplace(L"dir_with_multi_dir_file/more_dir/dir/single_file_1025byte.txt");
+
+  EXPECT_EQ(paths.size(), compare_set.size());
+
+  for (int i = 0; i < paths.size(); ++i) {
+    auto& path = paths[i];
+    if (compare_set.find(path) == compare_set.end()) {
+      EXPECT_TRUE(false) << "==> cant find file : " << path << std::endl;
+    }
+    if (path[path.size() - 1] == L'/') {  // dir path
+      for (int y = 0; y < i - 1; ++y) {
+        std::wstring prev_path = paths[y];
+        if (prev_path.find(path) != std::wstring::npos) {
+          EXPECT_TRUE(false) << "==> invalid sequence, prev : " << prev_path
+                             << ", cur : " << path << std::endl;
+        }
+      }
+    }
+  }
+}
+
 struct SUT_READ_TAR : public ::testing::Test {
   static std::vector<Tar*> single_file_vec_;
   static Tar single_file_0byte_;
@@ -95,45 +160,39 @@ struct SUT_READ_TAR : public ::testing::Test {
   static void SetUpTestCase() {
     std::wcout.imbue(std::locale( "kor" ));
 
-    char cwd[FILE_PATH_SIZE] = "";
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {
-      std::cout << "current working dir => " << cwd << std::endl;
-    }
-
-    AddTestTarget(cwd, name_to_tar(single_file_0byte), single_file_0byte_);
-    AddTestTarget(cwd, name_to_tar(single_file_1byte), single_file_1byte_);
-    AddTestTarget(cwd, name_to_tar(single_file_512byte), single_file_512byte_);
-    AddTestTarget(cwd, name_to_tar(single_file_513byte), single_file_513byte_);
-    AddTestTarget(cwd, name_to_tar(single_file_1024byte), single_file_1024byte_);
-    AddTestTarget(cwd, name_to_tar(single_file_1025byte), single_file_1025byte_);
-    InitTestTarget(cwd, name_to_tar(invalid_file_small_that_512), invalid_file_small_that_512);
+    AddTestTarget(name_to_tar(single_file_0byte), single_file_0byte_);
+    AddTestTarget(name_to_tar(single_file_1byte), single_file_1byte_);
+    AddTestTarget(name_to_tar(single_file_512byte), single_file_512byte_);
+    AddTestTarget(name_to_tar(single_file_513byte), single_file_513byte_);
+    AddTestTarget(name_to_tar(single_file_1024byte), single_file_1024byte_);
+    AddTestTarget(name_to_tar(single_file_1025byte), single_file_1025byte_);
+    InitTestTarget(name_to_tar(invalid_file_small_that_512), invalid_file_small_that_512);
     {
       std::wstringstream stm;
-      stm << cwd << TEST_DATA_TAR_PATH << L"한글 파일 이름.tar";
-      koread_file_name.init(stm.str().c_str());      
+      stm << TEST_DATA_TAR_PATH << L"한글 파일 이름.tar";
+      koread_file_name.init_tar(stm.str().c_str());      
       single_file_vec_.emplace_back(&koread_file_name);
     }
-    AddTestTarget(cwd, name_to_tar(multi_file_without_dir), multi_file_without_dir);
-    AddTestTarget(cwd, name_to_tar(multi_file_with_dir), multi_file_with_dir);
-  }  
+    AddTestTarget(name_to_tar(multi_file_without_dir), multi_file_without_dir);
+    AddTestTarget(name_to_tar(multi_file_with_dir), multi_file_with_dir);
+  }
   virtual void SetUp() override {
   }
   virtual void TearDown() override {
   }
 private:
   static void InitTestTarget(
-    const char* current_working_dir_path, 
     const char* tar_file_name,
     Tar& tar) {
       std::wstringstream stm;
-      stm << current_working_dir_path << TEST_DATA_TAR_PATH << tar_file_name;
-      tar.init(stm.str().c_str());
+      stm << TEST_DATA_TAR_PATH << tar_file_name;
+      std::wcout << stm.str() << std::endl; 
+      tar.init_tar(stm.str().c_str());
   }
   static void AddTestTarget(
-    const char* current_working_dir_path, 
     const char* tar_file_name,
     Tar& tar) {
-      InitTestTarget(current_working_dir_path, tar_file_name, tar);
+      InitTestTarget(tar_file_name, tar);
       single_file_vec_.emplace_back(&tar);
   }
 };
@@ -157,7 +216,7 @@ TEST_F(SUT_READ_TAR, FileOpenTest) {
 }
 
 TEST_F(SUT_READ_TAR, FileSizeTest) {
-  EXPECT_EQ(invalid_file_small_that_512.status(), TAR_ERR_CODE::INVALID_FILE_SIZE);
+  EXPECT_EQ(invalid_file_small_that_512.status(), TAR_ERR_CODE::TAR_ERR_INVALID_FILE_SIZE);
 }
 
 TEST_F(SUT_READ_TAR, TestKoreaFileName) {
@@ -238,4 +297,30 @@ TEST_F(SUT_READ_TAR, TarHeaderFormat) {
   //print_num_must_end_null(tar_header.devmajor);
   //print_num_must_end_null(tar_header.devminor);
   //print_str_should_fill_null_but_no_need_end_null(tar_header.prefix);  
+}
+
+struct SUT_WRITE_TAR : public ::testing::Test {  
+  static void SetUpTestCase() {
+    std::wcout.imbue(std::locale( "kor" ));
+  }  
+  virtual void SetUp() override {
+  }
+  virtual void TearDown() override {
+  }
+};
+
+TEST_F(SUT_WRITE_TAR, DirEmpty) {
+  // const wchar_t* target_dir_path = L"dir_empty";
+  // std::wstringstream stm;
+  // stm << test_data_dir_dir_path << target_dir_path;
+
+  // Tar tar;
+  // bool res = tar.init_dir(stm.str().c_str());
+  // EXPECT_TRUE(res);
+  // EXPECT_EQ(tar.status(), TAR_ERR_CODE::OK);
+
+  // auto tar_dir_header = tar.dir_at(0);
+
+  // EXPECT_TRUE(Tar::is_dir_tar_header(tar_dir_header));
+  // EXPECT_STREQ(tar_dir_header->name, "dir_empty/");
 }

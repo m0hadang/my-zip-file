@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.2)
 
-
 set(This Tester)
 project(${This} C CXX)
 
@@ -22,3 +21,7 @@ add_test(
   NAME ${This}
   COMMAND ${This}
 )
+
+# copy test data file
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test_data_dir DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Debug)
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test_data_tar DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Debug)

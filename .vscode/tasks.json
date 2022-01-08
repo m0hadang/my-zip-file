@@ -7,16 +7,19 @@
       "label": "cmake generate",
       "type": "shell",
       "command": "cmake -B build",
-      "problemMatcher": [],
       "options": {
         "cwd": "${workspaceRoot}"
-      },      
+      },
+      "problemMatcher": [],
     },    
     {
       "label": "test",
       "type": "shell",
       //"command": "${workspaceRoot}/build/test/Tester --gtest_break_on_failure",
       "command": "${workspaceRoot}/build/test/Debug/Tester --gtest_break_on_failure",//ms
+      "options": {
+        "cwd": "${workspaceRoot}/build/test/Debug/"
+      },
       "problemMatcher": [],
       "dependsOn": [
         "build"
