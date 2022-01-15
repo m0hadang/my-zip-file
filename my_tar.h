@@ -108,10 +108,20 @@ struct posix_header { /* byte offset */
    */
 };
 
+class DirectoryNameInfo {
+ public:
+  std::wstring base_path;
+  std::wstring name;
+  DirectoryNameInfo(
+    const std::wstring& base_path_, 
+    const std::wstring& name_)
+      : base_path(base_path_), name(name_) {}
+};
+
 std::wstring to_wstr(const std::string& t_str) {
-	typedef std::codecvt_utf8<wchar_t> convert_type;
-	std::wstring_convert<convert_type, wchar_t> converter;
-	return converter.from_bytes(t_str);
+  typedef std::codecvt_utf8<wchar_t> convert_type;
+  std::wstring_convert<convert_type, wchar_t> converter;
+  return converter.from_bytes(t_str);
 }
 
 int32_t oct_to_size(char* buf, size_t size){
@@ -141,18 +151,22 @@ std::wstring convert_stand_path(const std::wstring& path) {
   return str;
 }
 
-std::wstring get_dir_name(const std::wstring& path) {
+std::wstring convert_valid_dir_path(const std::wstring& path) {
+  return path;
+}
+
+DirectoryNameInfo get_dir_name_info(const std::wstring& path) {
 
   auto std_path = convert_stand_path(path);
 
   wchar_t split_ch = L'/';
   std::wstring split_str = L"/";
   if (std_path.empty() || std_path == split_str) {
-    return split_str;
+    return DirectoryNameInfo(L"", split_str);
   }
 
   if (std_path.size() == 1) {
-    return std_path + split_str;
+    return DirectoryNameInfo(L"", std_path + split_str);
   }
 
   size_t end_pivot = std_path.size() - 1;
@@ -167,87 +181,17 @@ std::wstring get_dir_name(const std::wstring& path) {
     ++find_pos;
   }
 
-  std::wstring str = std_path.substr(find_pos, end_pivot - find_pos + 1);
-  return std_path.substr(find_pos, end_pivot - find_pos + 1) + split_str;
-}
-
-std::vector<std::wstring> dir_listing(
-  const std::wstring& dir_path,
-  const std::wstring& cur_dir_path) {
-  
-  // _wsetlocale(LC_ALL, L"korean");
-  setlocale(LC_ALL, "");
-
-  std::vector<std::wstring> res;
-
-  // Check that the input path plus 3 is not longer than MAX_PATH.
-  // Three characters are for the "\*" plus NULL appended below.
-  size_t length_of_arg;
-  StringCchLengthW(dir_path.c_str(), MAX_PATH, &length_of_arg);
-  if (length_of_arg > (MAX_PATH - 3)) {
-    std::cout << "directory path is too long" << std::endl;
-    return res;
-  }
-
-  // Prepare string for use with FindFile functions.  First, copy the
-  // string to a buffer, then append '\*' to the directory name.
-  wchar_t target_dir_path[MAX_PATH] = L"";
-  StringCchCopyW(target_dir_path, MAX_PATH, dir_path.c_str());
-  StringCchCatW(target_dir_path, MAX_PATH, L"\\*");
-
-  // Find the first file in the directory.
-  WIN32_FIND_DATAW ffd;
-  HANDLE hwd_file = FindFirstFileW(target_dir_path, &ffd);
-
-  if (INVALID_HANDLE_VALUE == hwd_file) {
-    std::cout << "find first file fail(1), " << GetLastError() << std::endl;
-    return res;
-  } 
-  
-  // List all the files in the directory with some info about them.
-  do {
-    std::wstring file_name = ffd.cFileName;
-    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { //dir
-      if (file_name == L"..") {
-        continue;
-      }
-      if (file_name == L".") {
-        res.emplace_back(cur_dir_path);
-        continue;
-      }
-      auto child = dir_listing(
-        dir_path + file_name + L"\\",
-        cur_dir_path + file_name + L"/");
-      for(const auto& item : child) {
-        res.emplace_back(item);
-      }
-      // res.insert(child.begin(), child.end(), res.end());
-    } else {
-      LARGE_INTEGER filesize;
-      filesize.LowPart = ffd.nFileSizeLow;
-      filesize.HighPart = ffd.nFileSizeHigh;
-      res.emplace_back(cur_dir_path + file_name);
-    }
-  } while (FindNextFileW(hwd_file, &ffd) != 0);
-
-  auto last_error_num = GetLastError();
-  if (last_error_num != ERROR_NO_MORE_FILES) {
-    std::cout << "find first file fail(2)" << std::endl;
-  }
-
-  FindClose(hwd_file);
-
-  return res;
-}
-
-std::vector<std::wstring> get_dir_list(const std::wstring& dir_path) {
-  return dir_listing(dir_path, get_dir_name(dir_path));
+  return DirectoryNameInfo(
+    std_path.substr(0, find_pos), 
+    std_path.substr(find_pos, end_pivot - find_pos + 1) + split_str);
 }
 
 enum class TAR_ERR_CODE {
   OK,
   TAR_ERR_FILE_OPEN_FAIL,
+  TAR_ERR_DIR_OPEN_FAIL,
   TAR_ERR_INVALID_FILE_SIZE,
+  TAR_FILE_NAME_IS_TOO_LONG,
   TAR_ERR_UNKNOWN,
 };
 
@@ -302,8 +246,20 @@ public:
 
     return true;
   }
-  bool init_dir(const wchar_t* dir_path) {
-    status_ = TAR_ERR_CODE::OK;
+  bool init_dir(const wchar_t* dir_path) {  
+
+    auto dir_name_info = get_dir_name_info(dir_path);
+    
+    std::vector<std::wstring> dir_list;
+    status_ = dir_listing(dir_path, dir_name_info.name, dir_list);
+    if(status_ != TAR_ERR_CODE::OK) {
+      return false;
+    }
+
+    // for(const auto& item : dir_list) {
+    //   std::wcout << item << std::endl;
+    // }
+
     return true;
   }
   std::shared_ptr<posix_header> file_at(size_t idx) {
@@ -327,7 +283,9 @@ public:
   size_t dir_count() {
     return dir_headers_.size(); 
   }  
-  size_t tar_file_size() { return tar_file_size_; }
+  size_t tar_file_size() { 
+    return tar_file_size_; 
+  }
   void print() {
     std::wcout << "tar file path : " << tar_file_path_ << std::endl;
     std::wcout << "status_ : " << (int32_t)status() << std::endl;
@@ -340,12 +298,77 @@ public:
     }
 
     size_t last_idx = strlen(tar_header->name) - 1;
-    if (tar_header->name[last_idx] != '/') {
+    if (tar_header->name[last_idx] != '/') {//TODO : Not Cross platform
       return false;
     }
 
     return true;
-  }  
+  }
+  static TAR_ERR_CODE dir_listing(//TODO : Not Cross platform
+    const std::wstring& dir_path,
+    const std::wstring& cur_dir_path,
+    std::vector<std::wstring>& dir_list) {
+    
+    setlocale(LC_ALL, "");
+
+    // Check that the input path plus 3 is not longer than MAX_PATH.
+    // Three characters are for the "\*" plus NULL appended below.
+    size_t length_of_arg;
+    StringCchLengthW(dir_path.c_str(), MAX_PATH, &length_of_arg);
+    if (length_of_arg > (MAX_PATH - 3)) {
+      std::wcout << "directory path is too long" << std::endl;
+      return TAR_ERR_CODE::TAR_FILE_NAME_IS_TOO_LONG;
+    }
+
+    // Prepare string for use with FindFile functions.  First, copy the
+    // string to a buffer, then append '\*' to the directory name.
+    wchar_t target_dir_path[MAX_PATH] = L"";
+    StringCchCopyW(target_dir_path, MAX_PATH, dir_path.c_str());
+    StringCchCatW(target_dir_path, MAX_PATH, L"\\*");
+
+    // Find the first file in the directory.
+    WIN32_FIND_DATAW ffd;
+    HANDLE hwd_file = FindFirstFileW(target_dir_path, &ffd);
+
+    if (INVALID_HANDLE_VALUE == hwd_file) {
+      std::wcout << "find first file fail(1), " << GetLastError() << std::endl;
+      std::wcout << "|_ " << target_dir_path << std::endl;
+      return TAR_ERR_CODE::TAR_ERR_DIR_OPEN_FAIL;
+    } 
+    
+    // List all the files in the directory with some info about them.
+    do {
+      std::wstring file_name = ffd.cFileName;
+      if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) { //dir
+        if (file_name == L"..") {
+          continue;
+        }
+        if (file_name == L".") {
+          dir_list.emplace_back(cur_dir_path);
+          continue;
+        }
+        auto child = dir_listing(
+          dir_path + file_name + L"\\",//TODO : Not Cross platform
+          cur_dir_path + file_name + L"/",
+          dir_list);
+        // res.insert(child.begin(), child.end(), res.end());
+      } else {
+        LARGE_INTEGER filesize;
+        filesize.LowPart = ffd.nFileSizeLow;
+        filesize.HighPart = ffd.nFileSizeHigh;
+        dir_list.emplace_back(cur_dir_path + file_name);
+      }
+    } while (FindNextFileW(hwd_file, &ffd) != 0);
+
+    auto last_error_num = GetLastError();
+    if (last_error_num != ERROR_NO_MORE_FILES) {
+      std::wcout << "find first file fail(2)" << std::endl;
+    }
+
+    FindClose(hwd_file);
+
+    return TAR_ERR_CODE::OK;
+  }
 private:
   void add_tar_header(std::shared_ptr<posix_header> tar_header) {
     if (is_dir_tar_header(tar_header)) {
@@ -363,8 +386,8 @@ private:
   bool open_file(std::ifstream& in) {
     in.open(tar_file_path_.c_str(), std::ios::in | std::ios::binary);
     if (in.is_open() == false) {
-      std::cout << "open file error : " << tar_file_path_.c_str() << std::endl;
-      std::cout << strerror(errno) << std::endl;
+      std::wcout << "open file error : " << tar_file_path_.c_str() << std::endl;
+      std::wcout << strerror(errno) << std::endl;
       return false;
     }
     return true;
@@ -394,6 +417,7 @@ private:
 
     return content_alloc_space_size;
   }
+
 };
 
 }  // namespace mohadangkim

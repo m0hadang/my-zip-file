@@ -21,7 +21,9 @@ using namespace mohadangkim;
 #define TEST_DATA_TAR_PATH  "." SPLIT_CHAR "test_data_tar" SPLIT_CHAR
 #define TEST_DATA_DIR_PATH  "." SPLIT_CHAR "test_data_dir" SPLIT_CHAR
 
-#define name_to_tar(X) #X ## ".tar"
+#define name_to_tar(X) L#X ## ".tar"
+#define name_to_dir(X) L#X
+
 #define FILE_PATH_SIZE 10240
 
 using testing::StartsWith;
@@ -79,34 +81,65 @@ TEST(SUT_UTILITY, oct_to_size) {
   EXPECT_EQ(oct_to_size(num63, test_size), 63);
   EXPECT_EQ(oct_to_size(num64, test_size), 64);
 
-  char num_invalid[buf_size] = "000900";
+  char num_invalid[buf_size] = "000900";//it not octal
   EXPECT_EQ(oct_to_size(num_invalid, test_size), -1);
 }
 
+void check_get_dir_name(
+  const std::wstring& input,
+  const std::wstring& ans_bas_path,
+  const std::wstring& ans_name) {
+  auto dir_name_info = get_dir_name_info(input);
+  EXPECT_EQ(dir_name_info.base_path, ans_bas_path);
+  EXPECT_EQ(dir_name_info.name, ans_name);
+}
+
 TEST(SUT_UTILITY, get_dir_name) {
-  EXPECT_EQ(get_dir_name(L""), L"/");
-  EXPECT_EQ(get_dir_name(L"/"), L"/");
-  EXPECT_EQ(get_dir_name(L"\\"), L"/");
-  EXPECT_EQ(get_dir_name(L"a"), L"a/");
-  EXPECT_EQ(get_dir_name(L"a/"), L"a/");
-  EXPECT_EQ(get_dir_name(L"a\\"), L"a/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file"), L"dir_with_multi_dir_file/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/"), L"dir_with_multi_dir_file/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\"), L"dir_with_multi_dir_file/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/empty_dir"), L"empty_dir/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\empty_dir"), L"empty_dir/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/empty_dir/"), L"empty_dir/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\empty_dir\\"), L"empty_dir/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/한글"), L"한글/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\한글"), L"한글/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file/한글/"), L"한글/");
-  EXPECT_EQ(get_dir_name(L"dir_with_multi_dir_file\\한글\\"), L"한글/");
+  check_get_dir_name(L"", L"", L"/");
+  check_get_dir_name(L"/", L"", L"/");
+  check_get_dir_name(L"\\", L"", L"/");
+  check_get_dir_name(L"a", L"", L"a/");
+  check_get_dir_name(L"a/", L"", L"a/");
+  check_get_dir_name(L"a\\", L"", L"a/");
+  check_get_dir_name(L"dir_with_multi_dir_file", L"", L"dir_with_multi_dir_file/");
+  check_get_dir_name(L"dir_with_multi_dir_file/", L"", L"dir_with_multi_dir_file/");
+  check_get_dir_name(L"dir_with_multi_dir_file\\", L"", L"dir_with_multi_dir_file/");
+  check_get_dir_name(
+    L"dir_with_multi_dir_file/empty_dir", 
+    L"dir_with_multi_dir_file/", L"empty_dir/");
+  check_get_dir_name(
+    L"dir_with_multi_dir_file\\empty_dir", 
+    L"dir_with_multi_dir_file/", L"empty_dir/");  
+  check_get_dir_name(
+    L"dir_with_multi_dir_file/empty_dir/", 
+    L"dir_with_multi_dir_file/", L"empty_dir/");    
+  check_get_dir_name(
+    L"dir_with_multi_dir_file\\empty_dir\\", 
+    L"dir_with_multi_dir_file/", L"empty_dir/");
+  check_get_dir_name(
+    L"dir_with_multi_dir_file/한글", 
+    L"dir_with_multi_dir_file/", L"한글/");
+  check_get_dir_name(
+    L"dir_with_multi_dir_file\\한글",
+    L"dir_with_multi_dir_file/", L"한글/");  
+  check_get_dir_name(
+    L"dir_with_multi_dir_file/한글/",
+    L"dir_with_multi_dir_file/", L"한글/");
+  check_get_dir_name(
+    L"dir_with_multi_dir_file\\한글\\",
+    L"dir_with_multi_dir_file/", L"한글/");  
 }
 
 TEST(SUT_UTILITY, dir_listing) {
   std::wstringstream stm;
-  stm << TEST_DATA_DIR_PATH << L"dir_with_multi_dir_file" << SPLIT_CHAR; 
-  std::vector<std::wstring> paths = get_dir_list(stm.str().c_str());
+  stm << TEST_DATA_DIR_PATH << L"dir_with_multi_dir_file" << SPLIT_CHAR;
+
+  auto test_dir_path = stm.str();
+
+  std::vector<std::wstring> paths;
+  
+  auto dir_name_info = get_dir_name_info(test_dir_path);
+  Tar::dir_listing(test_dir_path, dir_name_info.name, paths);
 
   std::unordered_set<std::wstring> compare_set;
   compare_set.emplace(L"dir_with_multi_dir_file/");
@@ -145,34 +178,29 @@ TEST(SUT_UTILITY, dir_listing) {
 }
 
 struct SUT_READ_TAR : public ::testing::Test {
-  static std::vector<Tar*> single_file_vec_;
-  static Tar single_file_0byte_;
-  static Tar single_file_1byte_;
-  static Tar single_file_512byte_;
-  static Tar single_file_513byte_;
-  static Tar single_file_1024byte_;
-  static Tar single_file_1025byte_;
+  static std::vector<Tar*> tar_files;
+  static Tar single_file_0byte;
+  static Tar single_file_1byte;
+  static Tar single_file_512byte;
+  static Tar single_file_513byte;
+  static Tar single_file_1024byte;
+  static Tar single_file_1025byte;
   static Tar invalid_file_small_that_512;
-  static Tar koread_file_name;
+  static Tar korea_file_name;
   static Tar multi_file_without_dir;
   static Tar multi_file_with_dir;
 
   static void SetUpTestCase() {
     std::wcout.imbue(std::locale( "kor" ));
 
-    AddTestTarget(name_to_tar(single_file_0byte), single_file_0byte_);
-    AddTestTarget(name_to_tar(single_file_1byte), single_file_1byte_);
-    AddTestTarget(name_to_tar(single_file_512byte), single_file_512byte_);
-    AddTestTarget(name_to_tar(single_file_513byte), single_file_513byte_);
-    AddTestTarget(name_to_tar(single_file_1024byte), single_file_1024byte_);
-    AddTestTarget(name_to_tar(single_file_1025byte), single_file_1025byte_);
+    AddTestTarget(name_to_tar(single_file_0byte), single_file_0byte);
+    AddTestTarget(name_to_tar(single_file_1byte), single_file_1byte);
+    AddTestTarget(name_to_tar(single_file_512byte), single_file_512byte);
+    AddTestTarget(name_to_tar(single_file_513byte), single_file_513byte);
+    AddTestTarget(name_to_tar(single_file_1024byte), single_file_1024byte);
+    AddTestTarget(name_to_tar(single_file_1025byte), single_file_1025byte);
     InitTestTarget(name_to_tar(invalid_file_small_that_512), invalid_file_small_that_512);
-    {
-      std::wstringstream stm;
-      stm << TEST_DATA_TAR_PATH << L"한글 파일 이름.tar";
-      koread_file_name.init_tar(stm.str().c_str());      
-      single_file_vec_.emplace_back(&koread_file_name);
-    }
+    AddTestTarget(L"한글 파일 이름.tar", korea_file_name);
     AddTestTarget(name_to_tar(multi_file_without_dir), multi_file_without_dir);
     AddTestTarget(name_to_tar(multi_file_with_dir), multi_file_with_dir);
   }
@@ -182,59 +210,59 @@ struct SUT_READ_TAR : public ::testing::Test {
   }
 private:
   static void InitTestTarget(
-    const char* tar_file_name,
+    const wchar_t* tar_file_name,
     Tar& tar) {
       std::wstringstream stm;
       stm << TEST_DATA_TAR_PATH << tar_file_name;
-      std::wcout << stm.str() << std::endl; 
+      std::wcout << "test target : " << stm.str() << std::endl; 
       tar.init_tar(stm.str().c_str());
   }
   static void AddTestTarget(
-    const char* tar_file_name,
+    const wchar_t* tar_file_name,
     Tar& tar) {
       InitTestTarget(tar_file_name, tar);
-      single_file_vec_.emplace_back(&tar);
+      tar_files.emplace_back(&tar);
   }
 };
 
-std::vector<Tar*> SUT_READ_TAR::single_file_vec_;
-Tar SUT_READ_TAR::single_file_0byte_;
-Tar SUT_READ_TAR::single_file_1byte_;
-Tar SUT_READ_TAR::single_file_512byte_;
-Tar SUT_READ_TAR::single_file_513byte_;
-Tar SUT_READ_TAR::single_file_1024byte_;
-Tar SUT_READ_TAR::single_file_1025byte_;
+std::vector<Tar*> SUT_READ_TAR::tar_files;
+Tar SUT_READ_TAR::single_file_0byte;
+Tar SUT_READ_TAR::single_file_1byte;
+Tar SUT_READ_TAR::single_file_512byte;
+Tar SUT_READ_TAR::single_file_513byte;
+Tar SUT_READ_TAR::single_file_1024byte;
+Tar SUT_READ_TAR::single_file_1025byte;
 Tar SUT_READ_TAR::invalid_file_small_that_512;
-Tar SUT_READ_TAR::koread_file_name;
+Tar SUT_READ_TAR::korea_file_name;
 Tar SUT_READ_TAR::multi_file_without_dir;
 Tar SUT_READ_TAR::multi_file_with_dir;
 
-TEST_F(SUT_READ_TAR, FileOpenTest) {
-  for(const auto it : single_file_vec_) {
+TEST_F(SUT_READ_TAR, INIT__TEST) {
+  for(const auto it : tar_files) {
     EXPECT_EQ(it->status(), TAR_ERR_CODE::OK);
   }
 }
 
-TEST_F(SUT_READ_TAR, FileSizeTest) {
+TEST_F(SUT_READ_TAR, FILE_SIZE__TEST) {
   EXPECT_EQ(invalid_file_small_that_512.status(), TAR_ERR_CODE::TAR_ERR_INVALID_FILE_SIZE);
 }
 
-TEST_F(SUT_READ_TAR, TestKoreaFileName) {
-  auto koread_file_name_header = koread_file_name.file_at(0);
-  std::wstring str1 = to_wstr(koread_file_name_header->name);
+TEST_F(SUT_READ_TAR, KOREA_FILE_NAME__TEST) {
+  auto korea_file_name_header = korea_file_name.file_at(0);
+  std::wstring str1 = to_wstr(korea_file_name_header->name);
   std::wstring str2 = L"한글 파일 이름.txt";
   EXPECT_EQ(str1, str2);
 }
 
-TEST_F(SUT_READ_TAR, SingleFileCount) {
-  EXPECT_EQ(single_file_0byte_.file_count(), 1);
+TEST_F(SUT_READ_TAR, SINGLE_FILE_COUNT__TEST) {
+  EXPECT_EQ(single_file_0byte.file_count(), 1);
 }
 
-TEST_F(SUT_READ_TAR, MultiFileWithOutDirCount) {
+TEST_F(SUT_READ_TAR, MULTI_FILE_WITHOUT_DIR_COUNT__TEST) {
   EXPECT_EQ(multi_file_without_dir.file_count(), 4);
 }
 
-TEST_F(SUT_READ_TAR, MultiFileWithOutDirList) {
+TEST_F(SUT_READ_TAR, MULTI_FILE_WITHOUT_DIR_LIST__TEST) {
   auto item1 = multi_file_without_dir.file_at(0);
   auto item2 = multi_file_without_dir.file_at(1);
   auto item3 = multi_file_without_dir.file_at(2);
@@ -248,12 +276,12 @@ TEST_F(SUT_READ_TAR, MultiFileWithOutDirList) {
   EXPECT_TRUE(m.Matches(item4->name));
 }
 
-TEST_F(SUT_READ_TAR, MultiFileWithDirCount) {
+TEST_F(SUT_READ_TAR, MULTI_FILE_WITH_DIR_COUNT__TEST) {
   EXPECT_EQ(multi_file_with_dir.file_count(), 4);
   EXPECT_EQ(multi_file_with_dir.dir_count(), 4);
 }
 
-TEST_F(SUT_READ_TAR, MultiFileWithDirList) {
+TEST_F(SUT_READ_TAR, MULTI_FILE_WITH_DIR_LIST__TEST) {
   auto file_item1 = multi_file_with_dir.file_at(0);
   auto file_item2 = multi_file_with_dir.file_at(1);
   auto file_item3 = multi_file_with_dir.file_at(2);
@@ -274,7 +302,7 @@ TEST_F(SUT_READ_TAR, MultiFileWithDirList) {
   EXPECT_STREQ(dir_item4->name, "multi_file_with_dir/dir2/dir3/");
 }
 
-TEST_F(SUT_READ_TAR, TarHeaderFormat) {
+TEST_F(SUT_READ_TAR, TAR_HEADER_FORMAT) {
   // std::shared_ptr<posix_header> first_tar_header = VERY_LONG.at(0);
   // std::cout << first_tar_header->name << std::endl;
   // print_hex(first_tar_header->linkname, PH_LINKNAME_SIZE);
@@ -300,27 +328,80 @@ TEST_F(SUT_READ_TAR, TarHeaderFormat) {
 }
 
 struct SUT_WRITE_TAR : public ::testing::Test {  
+  static std::vector<Tar*> tar_files;
+  static Tar dir_empty;
+  static Tar dir_with_multi_dir;
+  static Tar dir_with_multi_dir_file;
+  static Tar dir_with_single_dir;
+  static Tar dir_with_single_file;
+  static Tar korea_dir_name;
+
   static void SetUpTestCase() {
     std::wcout.imbue(std::locale( "kor" ));
-  }  
+
+    AddTestTarget(name_to_dir(dir_empty), dir_empty);
+    AddTestTarget(name_to_dir(dir_with_multi_dir), dir_with_multi_dir);
+    AddTestTarget(name_to_dir(dir_with_multi_dir_file), dir_with_multi_dir_file);
+    AddTestTarget(name_to_dir(dir_with_single_dir), dir_with_single_dir);
+    AddTestTarget(name_to_dir(dir_with_single_file), dir_with_single_file);
+    AddTestTarget(L"한글 디렉터리 이름", korea_dir_name);
+  }
   virtual void SetUp() override {
   }
   virtual void TearDown() override {
   }
+private:
+  static void InitTestTarget(
+    const wchar_t* dir_name,
+    Tar& tar) {
+      std::wstringstream stm;
+      stm << TEST_DATA_DIR_PATH << dir_name << SPLIT_CHAR;
+      std::wcout << "test target : " << stm.str() << std::endl; 
+      tar.init_dir(stm.str().c_str());
+  }
+  static void AddTestTarget(
+    const wchar_t* dir_name,
+    Tar& tar) {
+      InitTestTarget(dir_name, tar);
+      tar_files.emplace_back(&tar);
+  }
 };
 
-TEST_F(SUT_WRITE_TAR, DirEmpty) {
-  // const wchar_t* target_dir_path = L"dir_empty";
-  // std::wstringstream stm;
-  // stm << test_data_dir_dir_path << target_dir_path;
+std::vector<Tar*> SUT_WRITE_TAR::tar_files;
+Tar SUT_WRITE_TAR::dir_empty;
+Tar SUT_WRITE_TAR::dir_with_multi_dir;
+Tar SUT_WRITE_TAR::dir_with_multi_dir_file;
+Tar SUT_WRITE_TAR::dir_with_single_dir;
+Tar SUT_WRITE_TAR::dir_with_single_file;
+Tar SUT_WRITE_TAR::korea_dir_name;
 
-  // Tar tar;
-  // bool res = tar.init_dir(stm.str().c_str());
-  // EXPECT_TRUE(res);
-  // EXPECT_EQ(tar.status(), TAR_ERR_CODE::OK);
-
-  // auto tar_dir_header = tar.dir_at(0);
-
-  // EXPECT_TRUE(Tar::is_dir_tar_header(tar_dir_header));
-  // EXPECT_STREQ(tar_dir_header->name, "dir_empty/");
+TEST_F(SUT_WRITE_TAR, INIT__TEST) {
+  for(const auto it : tar_files) {
+    EXPECT_EQ(it->status(), TAR_ERR_CODE::OK);
+  }
 }
+
+TEST_F(SUT_WRITE_TAR, DIR_EMPTY__COUNT_TEST) {
+  EXPECT_EQ(dir_empty.dir_count(), 0);
+  EXPECT_EQ(dir_empty.file_count(), 0);
+}
+TEST_F(SUT_WRITE_TAR, DIR_WITH_MULTI_DIR__COUNT_TEST) {
+  EXPECT_EQ(dir_with_multi_dir.dir_count(), 3);
+  EXPECT_EQ(dir_with_multi_dir.file_count(), 0);  
+}
+// TEST_F(SUT_WRITE_TAR, DIR_WITH_MULTI_DIR_FILE__COUNT_TEST) {
+//   EXPECT_EQ(dir_with_multi_dir_file.dir_count(), 0);
+//   EXPECT_EQ(dir_with_multi_dir_file.file_count(), 0);  
+// }
+// TEST_F(SUT_WRITE_TAR, DIR_WITH_SINGLE_DIR__COUNT_TEST) {
+//   EXPECT_EQ(dir_with_single_dir.dir_count(), 0);
+//   EXPECT_EQ(dir_with_single_dir.file_count(), 0);  
+// }
+// TEST_F(SUT_WRITE_TAR, DIR_WITH_SINGLE_FILE__COUNT_TEST) {
+//   EXPECT_EQ(dir_with_single_file.dir_count(), 0);
+//   EXPECT_EQ(dir_with_single_file.file_count(), 0);  
+// }
+// TEST_F(SUT_WRITE_TAR, KOREA_DIR_NAME__COUNT_TEST) {
+//   EXPECT_EQ(korea_dir_name.dir_count(), 0);
+//   EXPECT_EQ(korea_dir_name.file_count(), 0);  
+// }
