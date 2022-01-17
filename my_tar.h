@@ -152,7 +152,15 @@ std::wstring convert_stand_path(const std::wstring& path) {
 }
 
 std::wstring convert_valid_dir_path(const std::wstring& path) {
-  return path;
+  if (path.size() == 0) {
+    return LR"(\)";
+  }
+
+  if (path.at(path.size() - 1) == L'\\') {
+    return path;
+  }
+
+  return path + LR"(\)";
 }
 
 DirectoryNameInfo get_dir_name_info(const std::wstring& path) {
@@ -247,11 +255,11 @@ public:
     return true;
   }
   bool init_dir(const wchar_t* dir_path) {  
-
-    auto dir_name_info = get_dir_name_info(dir_path);
     
+    auto valid_dir_path = convert_valid_dir_path(dir_path);
+    auto dir_name_info = get_dir_name_info(valid_dir_path);
     std::vector<std::wstring> dir_list;
-    status_ = dir_listing(dir_path, dir_name_info.name, dir_list);
+    status_ = dir_listing(valid_dir_path, dir_name_info.name, dir_list);
     if(status_ != TAR_ERR_CODE::OK) {
       return false;
     }

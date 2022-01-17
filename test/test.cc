@@ -85,6 +85,14 @@ TEST(SUT_UTILITY, oct_to_size) {
   EXPECT_EQ(oct_to_size(num_invalid, test_size), -1);
 }
 
+TEST(SUT_UTILITY, convert_valid_dir_path) {
+  std::wstring invalid_path = std::wstring(LR"(.\valid\dir\path)");
+  std::wstring valid_path = std::wstring(LR"(.\valid\dir\path\)");
+
+  EXPECT_EQ(convert_valid_dir_path(invalid_path), valid_path);
+  EXPECT_EQ(convert_valid_dir_path(valid_path), valid_path);
+}
+
 void check_get_dir_name(
   const std::wstring& input,
   const std::wstring& ans_bas_path,
@@ -355,7 +363,7 @@ private:
     const wchar_t* dir_name,
     Tar& tar) {
       std::wstringstream stm;
-      stm << TEST_DATA_DIR_PATH << dir_name << SPLIT_CHAR;
+      stm << TEST_DATA_DIR_PATH << dir_name;
       std::wcout << "test target : " << stm.str() << std::endl; 
       tar.init_dir(stm.str().c_str());
   }
